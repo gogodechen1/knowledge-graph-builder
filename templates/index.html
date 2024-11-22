@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智能知识图谱构建系统</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/@mdi/font@6.5.95/css/materialdesignicons.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/vis-network@9.1.2/dist/vis-network.min.js"></script>
+    <style>
+        :root {
+            --primary-color: #6366f1;
+            --secondary-color: #818cf8;
+            --bg-color: #1a1b26;
+            --text-color: #c0caf5;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        }
+
+        .glass-effect {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+        }
+
+        .sidebar {
+            width: 320px;
+            height: calc(100vh - 64px);
+            transition: transform 0.3s ease;
+        }
+
+        #graph-container {
+            height: calc(100vh - 64px);
+            background: radial-gradient(circle at center, rgba(99, 102, 241, 0.1) 0%, transparent 70%);
+        }
+
+        .upload-zone {
+            border: 2px dashed rgba(255, 255, 255, 0.2);
+            transition: all 0.3s ease;
+        }
+
+        .upload-zone:hover {
+            border-color: var(--primary-color);
+            background: rgba(99, 102, 241, 0.1);
+        }
+
+        .btn-primary {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary:hover {
+            background-color: var(--secondary-color);
+            transform: translateY(-1px);
+        }
+
+        .node-card {
+            transition: all 0.3s ease;
+        }
+
+        .node-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .loading-spinner {
+            border: 3px solid rgba(255, 255, 255, 0.1);
+            border-top: 3px solid var(--primary-color);
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .fade-enter {
+            opacity: 0;
+            transform: translateY(10px);
+        }
+
+        .fade-enter-active {
+            opacity: 1;
+            transform: translateY(0);
+            transition: opacity 0.3s, transform 0.3s;
+        }
+    </style>
+</head>
+<body>
+    <!-- 顶部导航栏 -->
+    <nav class="glass-effect h-16 fixed w-full top-0 z-50 flex items-center justify-between px-6">
+        <div class="flex items-center space-x-4">
+            <span class="text-2xl font-bold text-primary">Knowledge Graph</span>
+            <div class="flex space-x-4 ml-8">
+                <button class="btn-primary flex items-center">
+                    <i class="mdi mdi-plus mr-2"></i>新建项目
+                </button>
+                <button class="btn-primary flex items-center">
+                    <i class="mdi mdi-folder-open mr-2"></i>打开项目
+                </button>
+            </div>
+        </div>
+        <div class="flex items-center space-x-4">
+            <button class="btn-primary flex items-center">
+                <i class="mdi mdi-cog mr-2"></i>设置
+            </button>
+            <button class="btn-primary flex items-center">
+                <i class="mdi mdi-help-circle mr-2"></i>帮助
+            </button>
+        </div>
+    </nav>
+
+    <!-- 主要内容区 -->
+    <div class="flex mt-16">
+        <!-- 左侧边栏 -->
+        <div class="sidebar glass-effect fixed left-0 p-4 overflow-y-auto" style="z-index: 1000;">
+            <div class="mb-6">
+                <h2 class="text-xl font-bold mb-4">素材管理</h2>
+                <div class="glass-effect p-4 rounded-lg mb-4">
+                    <div class="text-center mb-4">
+                        <button class="btn-primary w-full py-3 flex items-center justify-center" id="upload-btn">
+                            <i class="mdi mdi-cloud-upload text-2xl mr-2"></i>
+                            上传PNG图片
+                        </button>
+                        <input type="file" class="hidden" id="file-upload" accept=".png">
+                    </div>
+                    <div class="text-sm text-gray-400 mb-4">
+                        <h3 class="font-medium text-white mb-2">图片要求：</h3>
+                        <ul class="space-y-1">
+                            <li>• 仅支持PNG格式</li>
+                            <li>• 建议尺寸：800x600px</li>
+                            <li>• 最大文件大小：16MB</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="glass-effect p-4 rounded-lg mb-4">
+                    <h3 class="font-medium mb-2">素材规范</h3>
+                    <ul class="text-sm space-y-2 text-gray-300">
+                        <li>• 图片要求清晰、主题突出</li>
+                        <li>• 背景简洁，避免复杂纹理</li>
+                        <li>• 建议使用浅色或透明背景</li>
+                        <li>• 保持统一的视觉风格</li>
+                    </ul>
+                </div>
+                <div id="uploaded-files" class="space-y-2">
+                    <!-- 上传的文件将在这里显示 -->
+                </div>
+            </div>
+            <div>
+                <h2 class="text-xl font-bold mb-4">节点管理</h2>
+                <div class="space-y-3">
+                    <div class="node-card glass-effect p-4 rounded-lg">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="font-medium">节点名称</span>
+                            <i class="mdi mdi-dots-vertical cursor-pointer"></i>
+                        </div>
+                        <p class="text-sm opacity-70">节点描述信息...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 中央图谱展示区 -->
+        <div id="graph-container" class="flex-grow" style="z-index: 1;"></div>
+
+        <!-- 右侧边栏 -->
+        <div class="sidebar glass-effect fixed right-0 p-4 overflow-y-auto">
+            <div class="mb-6">
+                <h2 class="text-xl font-bold mb-4">节点详情</h2>
+                <div class="glass-effect p-4 rounded-lg">
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium mb-2">节点名称</label>
+                        <input type="text" class="w-full bg-transparent border border-gray-600 rounded-lg p-2">
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium mb-2">节点描述</label>
+                        <textarea class="w-full bg-transparent border border-gray-600 rounded-lg p-2" rows="3"></textarea>
+                    </div>
+                    <button class="btn-primary w-full">保存更改</button>
+                </div>
+            </div>
+            <div>
+                <h2 class="text-xl font-bold mb-4">关系列表</h2>
+                <div class="space-y-3">
+                    <div class="glass-effect p-3 rounded-lg flex items-center justify-between">
+                        <span>关系类型 1</span>
+                        <i class="mdi mdi-arrow-right text-primary"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- AI分析模态框 -->
+    <div id="ai-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
+        <div class="glass-effect p-6 rounded-lg max-w-2xl w-full mx-4">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-xl font-bold">AI 分析进行中</h3>
+                <button class="text-gray-400 hover:text-white">
+                    <i class="mdi mdi-close text-2xl"></i>
+                </button>
+            </div>
+            <div class="space-y-4">
+                <div class="loading-spinner mx-auto"></div>
+                <div id="ai-analysis-content" class="space-y-3">
+                    <!-- AI分析内容将在这里动态显示 -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 初始化图谱
+        const container = document.getElementById('graph-container');
+        const data = {
+            nodes: new vis.DataSet([]),
+            edges: new vis.DataSet([])
+        };
+        
+        const options = {
+            nodes: {
+                shape: 'dot',
+                size: 16,
+                font: {
+                    size: 14,
+                    color: '#c0caf5'
+                },
+                borderWidth: 2,
+                shadow: true
+            },
+            edges: {
+                width: 2,
+                color: {
+                    color: '#6366f1',
+                    highlight: '#818cf8',
+                    hover: '#818cf8'
+                },
+                font: {
+                    size: 12,
+                    color: '#c0caf5'
+                },
+                shadow: true
+            },
+            physics: {
+                stabilization: false,
+                barnesHut: {
+                    gravitationalConstant: -80000,
+                    springConstant: 0.001,
+                    springLength: 200
+                }
+            },
+            interaction: {
+                hover: true,
+                tooltipDelay: 200,
+                zoomView: true,
+                dragView: true
+            }
+        };
+
+        const network = new vis.Network(container, data, options);
+
+        // 文件上传处理
+        const uploadBtn = document.getElementById('upload-btn');
+        const fileInput = document.getElementById('file-upload');
+        const uploadedFiles = document.getElementById('uploaded-files');
+
+        uploadBtn.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        fileInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            if (!file.type.startsWith('image/png')) {
+                alert('只支持PNG格式的图片！');
+                return;
+            }
+            
+            if (file.size > 16 * 1024 * 1024) {
+                alert('文件大小不能超过16MB！');
+                return;
+            }
+
+            // 显示上传中状态
+            const originalText = uploadBtn.innerHTML;
+            uploadBtn.innerHTML = '<i class="mdi mdi-loading mdi-spin text-2xl mr-2"></i>上传中...';
+            uploadBtn.disabled = true;
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+                
+                if (result.success) {
+                    // 添加文件到列表
+                    const fileElement = document.createElement('div');
+                    fileElement.className = 'glass-effect p-3 rounded-lg flex items-center justify-between fade-enter';
+                    fileElement.innerHTML = `
+                        <div class="flex items-center">
+                            <img src="${result.url}" alt="${result.filename}" class="w-10 h-10 object-cover rounded mr-3">
+                            <span class="text-sm">${result.filename}</span>
+                        </div>
+                        <button class="text-red-400 hover:text-red-300" onclick="removeFile(this)">
+                            <i class="mdi mdi-delete"></i>
+                        </button>
+                    `;
+                    uploadedFiles.insertBefore(fileElement, uploadedFiles.firstChild);
+                    setTimeout(() => fileElement.classList.remove('fade-enter'), 10);
+                } else {
+                    alert(result.error || '上传失败');
+                }
+            } catch (error) {
+                console.error('Upload error:', error);
+                alert('上传失败，请重试');
+            } finally {
+                // 恢复按钮状态
+                uploadBtn.innerHTML = originalText;
+                uploadBtn.disabled = false;
+                // 清空文件输入框，允许重复上传相同文件
+                fileInput.value = '';
+            }
+        });
+
+        function removeFile(button) {
+            const fileElement = button.parentElement;
+            fileElement.classList.add('fade-enter');
+            setTimeout(() => fileElement.remove(), 300);
+        }
+
+        // 获取图谱数据
+        async function fetchGraphData() {
+            try {
+                const response = await fetch('/get_graph');
+                const graphData = await response.json();
+                data.nodes.clear();
+                data.edges.clear();
+                data.nodes.add(graphData.nodes);
+                data.edges.add(graphData.edges);
+            } catch (error) {
+                console.error('Error fetching graph data:', error);
+            }
+        }
+
+        // 初始加载图谱数据
+        fetchGraphData();
+
+        // 节点点击事件处理
+        network.on('click', function(params) {
+            if (params.nodes.length > 0) {
+                const nodeId = params.nodes[0];
+                // TODO: 实现节点详情获取和显示逻辑
+            }
+        });
+
+        // AI分析模态框控制
+        const aiModal = document.getElementById('ai-modal');
+        const aiContent = document.getElementById('ai-analysis-content');
+
+        function showAiModal() {
+            aiModal.classList.remove('hidden');
+        }
+
+        function hideAiModal() {
+            aiModal.classList.add('hidden');
+        }
+
+        function updateAiAnalysis(content) {
+            const element = document.createElement('div');
+            element.className = 'glass-effect p-3 rounded-lg fade-enter';
+            element.textContent = content;
+            aiContent.appendChild(element);
+            setTimeout(() => element.classList.remove('fade-enter'), 10);
+        }
+    </script>
+</body>
+</html>
